@@ -1,0 +1,36 @@
+import kotlin.Boolean;
+
+CREATE TABLE attendance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  checkInTime TEXT NOT NULL,
+  checkOutTime TEXT ,
+  isLate INTEGER AS Boolean DEFAULT 0 NOT NULL
+);
+
+insertEntry:
+INSERT INTO attendance(date, checkInTime, isLate)
+VALUES (?, ?, ?);
+
+updateExitTime:
+UPDATE attendance
+SET checkOutTime = ?
+WHERE id = ?;
+
+getAllEntries:
+SELECT * FROM attendance ORDER BY date DESC;
+
+getEntriesByMonth:
+SELECT * FROM attendance
+WHERE date LIKE ?
+ORDER BY date DESC;
+
+getLastEntry:
+SELECT * FROM attendance
+ORDER BY id DESC
+LIMIT 1;
+
+getEntryByDate:
+SELECT * FROM attendance
+WHERE date = ?
+LIMIT 1;
