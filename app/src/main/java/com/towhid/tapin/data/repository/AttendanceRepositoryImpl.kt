@@ -18,8 +18,8 @@ class AttendanceRepositoryImpl(
 ) : AttendanceRepository {
 
     private val queries = db.appDatabaseQueries
-    private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-    private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+    private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
+    private val timeFormatter = DateTimeFormatter.ISO_LOCAL_TIME
 
     override suspend fun insertRecord(date: LocalDate, checkInTime: LocalTime, isLate: Boolean) {
         withContext(Dispatchers.IO) {
@@ -44,8 +44,9 @@ class AttendanceRepositoryImpl(
     }
 
     override suspend fun getRecordByDate(date: LocalDate): AttendanceRecord? {
+        val dateStr = date.format(dateFormatter)
         return withContext(Dispatchers.IO) {
-            queries.getEntryByDate(date.format(dateFormatter)).executeAsOneOrNull()?.toDomainModel()
+            queries.getEntryByDate(dateStr).executeAsOneOrNull()?.toDomainModel()
         }
     }
 
@@ -57,7 +58,8 @@ class AttendanceRepositoryImpl(
     }
 
     override fun getMonthlyEntries(month: String): Flow<List<AttendanceRecord>> {
-        return queries.getEntriesByMonth("$month-%")
+        // month format: yyyy-MM
+        return queries.getEntriesByMonth("$month%")
             .asFlow()
             .mapToList(Dispatchers.IO)
             .map { list -> list.map { it.toDomainModel() } }

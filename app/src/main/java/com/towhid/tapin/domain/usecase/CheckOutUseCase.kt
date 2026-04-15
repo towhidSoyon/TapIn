@@ -6,9 +6,13 @@ import com.towhid.tapin.domain.util.TimeProvider
 
 class CheckOutUseCase(
     private val repository: AttendanceRepository,
-    private val timeProvider: TimeProvider
+    private val timeProvider: TimeProvider,
+    private val fixMissingCheckOutUseCase: FixMissingCheckOutUseCase
 ) {
     suspend fun execute(): Result<Unit> {
+        // Fix any missing check-outs from previous days
+        fixMissingCheckOutUseCase.execute()
+
         val today = timeProvider.getCurrentDate()
         
         val existingRecord = repository.getRecordByDate(today)
