@@ -1,5 +1,6 @@
 package com.towhid.tapin.presentation.attendance
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.towhid.tapin.domain.model.AttendanceRecord
 import com.towhid.tapin.domain.util.Formatter
+import com.towhid.tapin.presentation.components.TopBar
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,37 +40,29 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { 
-                    Text(
-                        "TapIn",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold 
-                    ) 
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+    Box(modifier = Modifier
+        .padding(0.dp)
+        .fillMaxSize()) {
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            TopBar(
+                title = "TapIn"
             )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top Section: Today's Status
+
                 TodayStatusCard(state)
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Middle Section: Actions
                 ActionButtons(
                     state = state,
                     onCheckIn = { viewModel.onEvent(HomeEvent.OnCheckInClicked) },
@@ -82,9 +76,11 @@ fun HomeScreen(
                     text = "History",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.Start).padding(bottom = 16.dp)
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(bottom = 16.dp)
                 )
-                
+
                 AttendanceList(state.attendanceList)
             }
 
@@ -117,17 +113,24 @@ fun TodayStatusCard(state: HomeState) {
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            StatusRow("Check In", if (state.todayCheckInTime != null) 
-                Formatter.formatTime(state.todayCheckInTime) 
-                else "Not Checked In")
+            StatusRow(
+                "Check In", if (state.todayCheckInTime != null)
+                    Formatter.formatTime(state.todayCheckInTime)
+                else "Not Checked In"
+            )
 
-            StatusRow("Check Out", if (state.todayCheckOutTime != null) 
-                Formatter.formatTime(state.todayCheckOutTime) 
-                else "Not Checked Out")
-            
+            StatusRow(
+                "Check Out", if (state.todayCheckOutTime != null)
+                    Formatter.formatTime(state.todayCheckOutTime)
+                else "Not Checked Out"
+            )
+
             if (state.todayCheckInTime != null) {
                 val statusColor = if (state.isLateToday) Color.Red else Color(0xFF2E7D32)
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Status: ",
@@ -183,7 +186,10 @@ fun ActionButtons(
                 .height(56.dp),
             enabled = state.todayCheckInTime == null && !state.isLoading,
             shape = RoundedCornerShape(12.dp),
-            elevation = ButtonDefaults.buttonColors().let { ButtonDefaults.elevatedButtonElevation() }
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF1976D2)
+            ),
+            elevation = ButtonDefaults.elevatedButtonElevation()
         ) {
             Text("Check In", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
@@ -194,7 +200,8 @@ fun ActionButtons(
                 .height(56.dp),
             enabled = state.todayCheckInTime != null && state.todayCheckOutTime == null && !state.isLoading,
             shape = RoundedCornerShape(12.dp),
-            elevation = ButtonDefaults.buttonColors().let { ButtonDefaults.elevatedButtonElevation() }
+            elevation = ButtonDefaults.buttonColors()
+                .let { ButtonDefaults.elevatedButtonElevation() }
         ) {
             Text("Check Out", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
@@ -209,93 +216,100 @@ fun AttendanceList(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 64.dp), 
+                .padding(top = 64.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "No records yet", 
+                    text = "No records yet",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.outline
                 )
                 Text(
-                    text = "Your check-ins will appear here", 
+                    text = "Your check-ins will appear here",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                 )
             }
         }
     } else {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
+
             LazyColumn(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 itemsIndexed(list) { index, record ->
                     AttendanceItem(record)
-                    if (index < list.size - 1) {
+                    /*if (index < list.size - 1) {
+                        Spacer(modifier = Modifier.height(16.dp))
                         HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
+                            modifier = Modifier,
                             color = MaterialTheme.colorScheme.outlineVariant
                         )
-                    }
+                    }*/
                 }
             }
         }
-    }
+
 }
 
 @Composable
 fun AttendanceItem(
     record: AttendanceRecord
 ) {
-    Row(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (record.isLate) Color.Red.copy(alpha = 0.1f).copy(alpha = 0.1f)
+            else Color(0xFF2E7D32).copy(alpha = 0.1f)
+        )
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = Formatter.formatDate(record.date),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Row {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "In: ${Formatter.formatTime(record.checkInTime)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = Formatter.formatDate(record.date),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
                 )
-                record.checkOutTime?.let {
-                    Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Row {
                     Text(
-                        text = "Out: ${Formatter.formatTime(it)}",
+                        text = "In: ${Formatter.formatTime(record.checkInTime)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    record.checkOutTime?.let {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Out: ${Formatter.formatTime(it)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
-        }
-        
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = if (record.isLate) Color.Red.copy(alpha = 0.1f) else Color(0xFF2E7D32).copy(alpha = 0.1f)
-        ) {
-            Text(
-                text = if (record.isLate) "LATE" else "ON TIME",
-                color = if (record.isLate) Color.Red else Color(0xFF2E7D32),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (record.isLate) Color.Red.copy(alpha = 0.1f) else Color(0xFF2E7D32).copy(
+                    alpha = 0.1f
+                )
+            ) {
+                Text(
+                    text = if (record.isLate) "LATE" else "ON TIME",
+                    color = if (record.isLate) Color.Red else Color(0xFF2E7D32),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
         }
     }
+
 }

@@ -2,32 +2,34 @@ package com.towhid.tapin.presentation.attendance
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.towhid.tapin.domain.model.AttendanceError
 import com.towhid.tapin.domain.model.AttendanceRecord
-import com.towhid.tapin.domain.usecase.*
+import com.towhid.tapin.domain.repository.AttendanceRepository
+import com.towhid.tapin.domain.repository.SettingsRepository
+import com.towhid.tapin.domain.util.AttendanceRules
 import com.towhid.tapin.domain.util.TimeProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import kotlin.collections.filter
+import kotlin.collections.forEach
 
 /**
  * ViewModel responsible for managing attendance state and handling user actions.
- * Follows Clean Architecture by interacting with domain-layer UseCases.
+ * Refactored to remove UseCase layer and interact directly with repositories.
  */
 class HomeViewModel(
-    private val checkInUseCase: CheckInUseCase,
-    private val checkOutUseCase: CheckOutUseCase,
-    private val getAttendanceListUseCase: GetAttendanceListUseCase,
-    private val getMonthlyStatsUseCase: GetMonthlyStatsUseCase,
-    private val fixMissingCheckOutUseCase: FixMissingCheckOutUseCase,
+    private val repository: AttendanceRepository,
+    private val settingsRepository: SettingsRepository,
     private val timeProvider: TimeProvider
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
-    // Holds the reference to the active data stream collection
     private var dataCollectionJob: Job? = null
 
     init {
@@ -35,23 +37,19 @@ class HomeViewModel(
         observeTimeChanges()
     }
 
-    /**
-     * Monitors system time to handle date changes while the app is running.
-     * Triggers a refresh if the date moves forward (e.g., at midnight).
-     */
     private fun observeTimeChanges() {
         viewModelScope.launch {
             while (true) {
                 val today = timeProvider.getCurrentDate()
                 val currentAttendance = _state.value.attendanceList
-                
+
                 if (currentAttendance.isNotEmpty()) {
                     val lastRecordDate = currentAttendance.firstOrNull()?.date
                     if (lastRecordDate != null && lastRecordDate != today) {
                         loadInitialData()
                     }
                 }
-                delay(60000) // Poll every minute
+                delay(60000)
             }
         }
     }
@@ -66,34 +64,41 @@ class HomeViewModel(
         }
     }
 
-    /**
-     * Loads the attendance history and monthly statistics.
-     * Only displays and calculates data for the current month/year.
-     */
     private fun loadInitialData() {
         dataCollectionJob?.cancel()
         val today = timeProvider.getCurrentDate()
+        val currentMonthPrefix = today.format(DateTimeFormatter.ofPattern("yyyy-MM"))
 
         dataCollectionJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
 
-            // Fix any missing check-outs from previous days before loading data
-            fixMissingCheckOutUseCase.execute()
+            fixMissingCheckOuts()
 
             combine(
-                getAttendanceListUseCase.execute(),
-                getMonthlyStatsUseCase.execute()
-            ) { attendanceList, monthlyStats ->
+                repository.getAllEntries().map { entries ->
+                    entries.filter { it.date.month == today.month && it.date.year == today.year }
+                },
+                combine(
+                    repository.getMonthlyEntries(currentMonthPrefix),
+                    settingsRepository.getSettings()
+                ) { entries, settings ->
+                    val filteredEntries = entries.filter {
+                        it.date.month == today.month && it.date.year == today.year
+                    }
+                    val lateCount = AttendanceRules.countLateDaysForMonth(filteredEntries)
+                    Pair(lateCount, AttendanceRules.shouldDeductLeave(lateCount, settings.allowedLateDays))
+                }
+            ) { attendanceList, stats ->
                 val todayRecord = attendanceList.find { it.date == today }
-                
+
                 _state.update {
                     it.copy(
                         attendanceList = attendanceList,
                         todayCheckInTime = todayRecord?.checkInTime,
                         todayCheckOutTime = todayRecord?.checkOutTime,
                         isLateToday = todayRecord?.isLate ?: false,
-                        monthlyLateCount = monthlyStats.lateCount,
-                        shouldDeductLeave = monthlyStats.shouldDeductLeave,
+                        monthlyLateCount = stats.first,
+                        shouldDeductLeave = stats.second,
                         isLoading = false
                     )
                 }
@@ -108,13 +113,23 @@ class HomeViewModel(
 
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            checkInUseCase.execute()
-                .onSuccess {
-                    _state.update { it.copy(successMessage = "Checked in successfully") }
+            try {
+                fixMissingCheckOuts()
+                val today = timeProvider.getCurrentDate()
+                val existingRecord = repository.getRecordByDate(today)
+                if (existingRecord != null) {
+                    throw AttendanceError.AlreadyCheckedIn
                 }
-                .onFailure { error ->
-                    _state.update { it.copy(errorMessage = error.message ?: "Check-in failed", isLoading = false) }
-                }
+
+                val settings = settingsRepository.getSettings().first()
+                val now = timeProvider.getCurrentTime()
+                val isLate = AttendanceRules.isLate(now, settings.lateThresholdTime)
+
+                repository.insertRecord(today, now, isLate)
+                _state.update { it.copy(successMessage = "Checked in successfully") }
+            } catch (e: Exception) {
+                _state.update { it.copy(errorMessage = e.message ?: "Check-in failed", isLoading = false) }
+            }
         }
     }
 
@@ -124,13 +139,31 @@ class HomeViewModel(
 
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            checkOutUseCase.execute()
-                .onSuccess {
-                    _state.update { it.copy(successMessage = "Checked out successfully") }
+            try {
+                fixMissingCheckOuts()
+                val today = timeProvider.getCurrentDate()
+                val existingRecord = repository.getRecordByDate(today) ?: throw AttendanceError.NotCheckedIn
+                if (existingRecord.checkOutTime != null) {
+                    throw AttendanceError.AlreadyCheckedOut
                 }
-                .onFailure { error ->
-                    _state.update { it.copy(errorMessage = error.message ?: "Check-out failed", isLoading = false) }
-                }
+
+                val now = timeProvider.getCurrentTime()
+                repository.updateCheckOutTime(today, now)
+                _state.update { it.copy(successMessage = "Checked out successfully") }
+            } catch (e: Exception) {
+                _state.update { it.copy(errorMessage = e.message ?: "Check-out failed", isLoading = false) }
+            }
+        }
+    }
+
+    private suspend fun fixMissingCheckOuts() {
+        val today = timeProvider.getCurrentDate()
+        val allEntries = repository.getAllEntries().first()
+        val missingCheckOuts = allEntries.filter {
+            it.checkOutTime == null && it.date.isBefore(today)
+        }
+        missingCheckOuts.forEach { record ->
+            repository.updateCheckOutTime(record.date, LocalTime.of(23, 59))
         }
     }
 }

@@ -8,7 +8,6 @@ import com.towhid.tapin.data.repository.SettingsRepositoryImpl
 import com.towhid.tapin.db.AppDatabase
 import com.towhid.tapin.domain.repository.AttendanceRepository
 import com.towhid.tapin.domain.repository.SettingsRepository
-import com.towhid.tapin.domain.usecase.*
 import com.towhid.tapin.domain.util.DefaultTimeProvider
 import com.towhid.tapin.domain.util.TimeProvider
 import com.towhid.tapin.presentation.attendance.HomeViewModel
@@ -40,18 +39,12 @@ val appModule = module {
 
     single<TimeProvider> { DefaultTimeProvider() }
 
-    factory { FixMissingCheckOutUseCase(get(), get()) }
-    factory { CheckInUseCase(get(), get(), get(), get()) }
-    factory { CheckOutUseCase(get(), get(), get()) }
-    factory { GetAttendanceListUseCase(get(), get()) }
-    factory { GetMonthlyStatsUseCase(get(), get(), get()) }
-
     viewModel {
-        HomeViewModel(get(), get(), get(), get(), get(), get())
+        HomeViewModel(get(), get(), get())
     }
 
     viewModel {
-        DashboardViewModel(get(), get(), get(), get(),get())
+        DashboardViewModel(get(), get(), get())
     }
 
     viewModel {

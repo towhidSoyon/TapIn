@@ -3,6 +3,7 @@ package com.towhid.tapin.data.repository
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.towhid.tapin.db.AppDatabase
+import com.towhid.tapin.db.Attendance
 import com.towhid.tapin.domain.model.AttendanceRecord
 import com.towhid.tapin.domain.repository.AttendanceRepository
 import kotlinx.coroutines.Dispatchers
@@ -58,14 +59,13 @@ class AttendanceRepositoryImpl(
     }
 
     override fun getMonthlyEntries(month: String): Flow<List<AttendanceRecord>> {
-        // month format: yyyy-MM
         return queries.getEntriesByMonth("$month%")
             .asFlow()
             .mapToList(Dispatchers.IO)
             .map { list -> list.map { it.toDomainModel() } }
     }
 
-    private fun com.towhid.tapin.db.Attendance.toDomainModel(): AttendanceRecord {
+    private fun Attendance.toDomainModel(): AttendanceRecord {
         return AttendanceRecord(
             id = id,
             date = LocalDate.parse(date, dateFormatter),

@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.towhid.tapin.presentation.components.TopBar
 import org.koin.androidx.compose.koinViewModel
 import java.util.Locale
 
@@ -24,19 +25,24 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-    
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Statistics", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+
+
+
+    Box(
+        modifier = Modifier
+            .padding(0.dp)
+            .fillMaxSize()
+    ) {
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            TopBar(
+                title = "Stats"
             )
-        }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+
             if (state.totalPresent == 0 && !state.isLoading) {
                 EmptyDashboardState()
             } else {
@@ -65,7 +71,7 @@ fun DashboardScreen(
                     )
                 }
             }
-            
+
             if (state.isLoading) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -79,7 +85,7 @@ fun DashboardScreen(
 
             state.errorMessage?.let { error ->
                 Snackbar(
-                    modifier = Modifier.padding(16.dp).align(Alignment.BottomCenter),
+                    modifier = Modifier.padding(16.dp),
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer
                 ) {
@@ -90,10 +96,13 @@ fun DashboardScreen(
     }
 }
 
+
 @Composable
 fun EmptyDashboardState() {
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -120,7 +129,7 @@ fun EmptyDashboardState() {
 
 @Composable
 fun MonthlyStatsCard(
-    lateCount: Int, 
+    lateCount: Int,
     allowedLates: Int,
     remainingLates: Int,
     percentage: Float
@@ -165,17 +174,21 @@ fun MonthlyStatsCard(
                         text = "$remainingLates",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = if (remainingLates == 0 && lateCount >= allowedLates) Color.Red else Color(0xFF2E7D32)
+                        color = if (remainingLates == 0 && lateCount >= allowedLates) Color.Red else Color(
+                            0xFF2E7D32
+                        )
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(text = "Attendance Score", style = MaterialTheme.typography.bodyMedium)
             LinearProgressIndicator(
                 progress = { percentage / 100f },
-                modifier = Modifier.fillMaxWidth().height(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(12.dp),
                 strokeCap = StrokeCap.Round,
                 color = if (percentage > 80) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
             )

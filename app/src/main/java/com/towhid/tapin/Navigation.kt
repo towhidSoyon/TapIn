@@ -1,6 +1,9 @@
 package com.towhid.tapin
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -13,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -24,10 +29,10 @@ import com.towhid.tapin.presentation.attendance.HomeScreen
 import com.towhid.tapin.presentation.dashboard.DashboardScreen
 import com.towhid.tapin.presentation.settings.SettingsScreen
 
-sealed class Screen(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector) {
-    object Home : Screen("home", "Home", Icons.Outlined.Home, Icons.Filled.Home)
-    object Dashboard : Screen("dashboard", "Stats", Icons.Outlined.Info, Icons.Filled.Info)
-    object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
+sealed class Screen(val route: String, val label: String, val icon: Int, val selectedIcon: Int) {
+    object Home : Screen("home", "Home", R.drawable.home, R.drawable.home)
+    object Dashboard : Screen("dashboard", "Stats", R.drawable.dashboard, R.drawable.dashboard)
+    object Settings : Screen("settings", "Settings", R.drawable.settings, R.drawable.settings)
 }
 
 @Composable
@@ -35,6 +40,7 @@ fun MainScreen() {
     val navController = rememberNavController()
     
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             BottomNavigationBar(navController = navController)
         }
@@ -72,9 +78,10 @@ fun BottomNavigationBar(navController: NavHostController) {
             val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
             NavigationBarItem(
                 icon = {
-                    Icon(
-                        imageVector = if (isSelected) screen.selectedIcon else screen.icon,
-                        contentDescription = screen.label
+                    Image(
+                        painter = painterResource(if (isSelected) screen.selectedIcon else screen.icon),
+                        contentDescription = screen.label,
+                        modifier = Modifier.size(20.dp)
                     )
                 },
                 label = { Text(screen.label) },

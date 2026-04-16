@@ -2,20 +2,23 @@ package com.towhid.tapin.presentation.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.towhid.tapin.domain.repository.AttendanceRepository
 import com.towhid.tapin.domain.repository.SettingsRepository
-import com.towhid.tapin.domain.usecase.FixMissingCheckOutUseCase
-import com.towhid.tapin.domain.usecase.GetAttendanceListUseCase
-import com.towhid.tapin.domain.usecase.GetMonthlyStatsUseCase
+import com.towhid.tapin.domain.util.AttendanceRules
 import com.towhid.tapin.domain.util.TimeProvider
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 /**
  * State representing the UI of the Dashboard/Statistics Screen.
  */
 data class DashboardState(
     val lateCount: Int = 0,
-    val allowedLateDays: Int = 2,
+    val allowedLateDays: Int = 0,
     val remainingLateDays: Int = 0,
     val shouldDeductLeave: Boolean = false,
     val totalPresent: Int = 0,
@@ -25,10 +28,8 @@ data class DashboardState(
 )
 
 class DashboardViewModel(
-    private val getAttendanceListUseCase: GetAttendanceListUseCase,
-    private val getMonthlyStatsUseCase: GetMonthlyStatsUseCase,
+    private val attendanceRepository: AttendanceRepository,
     private val settingsRepository: SettingsRepository,
-    private val fixMissingCheckOutUseCase: FixMissingCheckOutUseCase,
     private val timeProvider: TimeProvider
 ) : ViewModel() {
 
@@ -36,54 +37,77 @@ class DashboardViewModel(
     val state: StateFlow<DashboardState> = _state.asStateFlow()
 
     init {
+        loadDashboardData()
+    }
+
+    private fun loadDashboardData() {
+        val today = timeProvider.getCurrentDate()
+        val currentMonthPrefix = today.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            fixMissingCheckOutUseCase.execute()
-            loadDashboardData()
+            
+            fixMissingCheckOuts()
+
+            combine(
+                attendanceRepository.getAllEntries().map { entries ->
+                    entries.filter { it.date.month == today.month && it.date.year == today.year }
+                },
+                settingsRepository.getSettings()
+            ) { attendanceList, settings ->
+                val lateCount = AttendanceRules.countLateDaysForMonth(attendanceList)
+                val totalPresent = attendanceList.size
+                val workingDaysElapsed = calculateWorkingDaysElapsed(today)
+                
+                val percentage = if (workingDaysElapsed > 0) {
+                    (totalPresent.toFloat() / workingDaysElapsed.toFloat()) * 100f
+                } else 0f
+
+                DashboardState(
+                    lateCount = lateCount,
+                    allowedLateDays = settings.allowedLateDays,
+                    remainingLateDays = (settings.allowedLateDays - lateCount).coerceAtLeast(0),
+                    shouldDeductLeave = AttendanceRules.shouldDeductLeave(lateCount, settings.allowedLateDays),
+                    totalPresent = totalPresent,
+                    attendancePercentage = percentage,
+                    isLoading = false
+                )
+            }.catch { e ->
+                _state.update { 
+                    it.copy(
+                        isLoading = false, 
+                        errorMessage = e.message ?: "Failed to load dashboard data" 
+                    ) 
+                }
+            }.collect { newState ->
+                _state.value = newState
+            }
         }
     }
 
     /**
-     * Combines multiple data sources to provide a unified dashboard state.
-     * Logic for calculations is centralized here to keep the UI clean.
+     * Calculates the number of working days (excluding Friday and Saturday) 
+     * from the start of the month until the given date.
      */
-    private fun loadDashboardData() {
-        combine(
-            getAttendanceListUseCase.execute(),
-            getMonthlyStatsUseCase.execute(),
-            settingsRepository.getSettings()
-        ) { attendanceList, monthlyStats, settings ->
-            val totalPresent = attendanceList.size
-            val today = timeProvider.getCurrentDate()
-            val daysElapsedInMonth = today.dayOfMonth
-            
-            // Basic calculation: total working days is considered as days passed so far in the month
-            val percentage = if (daysElapsedInMonth > 0) {
-                (totalPresent.toFloat() / daysElapsedInMonth.toFloat()) * 100f
-            } else 0f
-
-            DashboardState(
-                lateCount = monthlyStats.lateCount,
-                allowedLateDays = settings.allowedLateDays,
-                remainingLateDays = (settings.allowedLateDays - monthlyStats.lateCount).coerceAtLeast(0),
-                shouldDeductLeave = monthlyStats.shouldDeductLeave,
-                totalPresent = totalPresent,
-                attendancePercentage = percentage,
-                isLoading = false,
-                errorMessage = null
-            )
-        }
-        .catch { e ->
-            _state.update { 
-                it.copy(
-                    isLoading = false, 
-                    errorMessage = e.message ?: "Failed to load dashboard data" 
-                ) 
+    private fun calculateWorkingDaysElapsed(today: LocalDate): Int {
+        var workingDays = 0
+        for (day in 1..today.dayOfMonth) {
+            val date = today.withDayOfMonth(day)
+            if (date.dayOfWeek != DayOfWeek.FRIDAY && date.dayOfWeek != DayOfWeek.SATURDAY) {
+                workingDays++
             }
         }
-        .onEach { newState ->
-            _state.value = newState
+        return workingDays
+    }
+
+    private suspend fun fixMissingCheckOuts() {
+        val today = timeProvider.getCurrentDate()
+        val allEntries = attendanceRepository.getAllEntries().first()
+        val missingCheckOuts = allEntries.filter { 
+            it.checkOutTime == null && it.date.isBefore(today)
         }
-        .launchIn(viewModelScope)
+        missingCheckOuts.forEach { record ->
+            attendanceRepository.updateCheckOutTime(record.date, LocalTime.of(23, 59))
+        }
     }
 }
